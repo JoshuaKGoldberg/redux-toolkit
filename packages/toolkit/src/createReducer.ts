@@ -66,6 +66,12 @@ export type CaseReducers<S, AS extends Actions> = {
   [T in keyof AS]: AS[T] extends Action ? CaseReducer<S, AS[T]> : void
 }
 
+type NotFunction<T> = T extends Function ? never : T
+
+export type ReducerWithInitialState<S extends NotFunction<any>> = Reducer<S> & {
+  getInitialState: () => S
+}
+
 /**
  * A utility function that allows defining a reducer as a mapping from action
  * type to *case reducer* functions that handle these action types. The
@@ -130,10 +136,10 @@ createReducer(
 ```
  * @public
  */
-export function createReducer<S>(
-  initialState: S,
+export function createReducer<S extends NotFunction<any>>(
+  initialState: S | (() => S),
   builderCallback: (builder: ActionReducerMapBuilder<S>) => void
-): Reducer<S>
+): ReducerWithInitialState<S>
 
 /**
  * A utility function that allows defining a reducer as a mapping from action
@@ -180,31 +186,35 @@ const counterReducer = createReducer(0, {
  * @public
  */
 export function createReducer<
-  S,
+  S extends NotFunction<any>,
   CR extends CaseReducers<S, any> = CaseReducers<S, any>
 >(
-  initialState: S,
+  initialState: S | (() => S),
   actionsMap: CR,
   actionMatchers?: ActionMatcherDescriptionCollection<S>,
   defaultCaseReducer?: CaseReducer<S>
-): Reducer<S>
+): ReducerWithInitialState<S>
 
-export function createReducer<S>(
-  initialState: S,
+export function createReducer<S extends NotFunction<any>>(
+  initialState: S | (() => S),
   mapOrBuilderCallback:
     | CaseReducers<S, any>
     | ((builder: ActionReducerMapBuilder<S>) => void),
   actionMatchers: ReadonlyActionMatcherDescriptionCollection<S> = [],
   defaultCaseReducer?: CaseReducer<S>
-): Reducer<S> {
+): ReducerWithInitialState<S> {
   let [actionsMap, finalActionMatchers, finalDefaultCaseReducer] =
     typeof mapOrBuilderCallback === 'function'
       ? executeReducerBuilderCallback(mapOrBuilderCallback)
       : [mapOrBuilderCallback, actionMatchers, defaultCaseReducer]
 
-  const frozenInitialState = createNextState(initialState, () => {})
+  const getInitialState = (): S => {
+    const stateToUse =
+      typeof initialState === 'function' ? initialState() : initialState
+    return createNextState(stateToUse, () => {}) as S
+  }
 
-  return function (state = frozenInitialState, action): S {
+  function reducer(state = getInitialState(), action: any): S {
     let caseReducers = [
       actionsMap[action.type],
       ...finalActionMatchers
@@ -257,4 +267,8 @@ export function createReducer<S>(
       return previousState
     }, state)
   }
+
+  reducer.getInitialState = getInitialState
+
+  return reducer as ReducerWithInitialState<S>
 }
