@@ -208,9 +208,14 @@ export function createReducer<S extends NotFunction<any>>(
       ? executeReducerBuilderCallback(mapOrBuilderCallback)
       : [mapOrBuilderCallback, actionMatchers, defaultCaseReducer]
 
+  const isStateFunction = <S>(x: unknown): x is () => S => {
+    return typeof x === 'function'
+  }
+
   const getInitialState = (): S => {
-    const stateToUse =
-      typeof initialState === 'function' ? initialState() : initialState
+    const stateToUse = isStateFunction(initialState)
+      ? initialState()
+      : initialState
     return createNextState(stateToUse, () => {}) as S
   }
 
